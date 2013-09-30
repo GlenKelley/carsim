@@ -6,6 +6,7 @@ import (
    gtk "github.com/GlenKelley/go-glutil"
    gl "github.com/GlenKelley/go-gl/gl32"
    glm "github.com/Jragonmiris/mathgl"
+   sim "github.com/GlenKelley/carsim"
 )
 
 func main() {
@@ -19,7 +20,7 @@ type Receiver struct {
    Data     DataBindings
    Shaders  gtk.ShaderLibrary
    SceneLoc SceneBindings
-   Car      Car
+   Car      sim.Car
    Controls  gtk.ControlBindings
    UIState  UIState
 }
@@ -39,17 +40,10 @@ type SceneBindings struct {
    Position gl.AttributeLocation `gl:"position"`
 }
 
-type Car struct {
-   Position  glm.Vec4d
-   Orientation glm.Quatd
-   Velocity glm.Vec4d
-   EngineForce float64
-   BreakForce float64
-}
-
 type UIState struct {
    IsRotating bool
    Theta      float64
+   Controls   sim.Controls
 }
 
 const (
@@ -57,9 +51,6 @@ const (
    Fov = 60
    Near = 0.1
    Far = 100
-   CarMass = 1.0
-   MaximumEngineForce = 10
-   MaximumBreakForce = 10
 )
 
 func (r *Receiver) Init(window *glfw.Window) {
@@ -80,13 +71,7 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Car = model.Children[0]
    r.Data.Scene.AddGeometry(gtk.Grid(10))
    
-   r.Car = Car{
-      glm.Vec4d{0,0,0,1},
-      glm.QuatIdentd(),
-      glm.Vec4d{},
-      0.0,
-      0.0,
-   }
+   r.Car = sim.NewCar()
    r.ResetKeyBindingDefaults()
 }
 
@@ -133,30 +118,8 @@ func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
 
 func (r *Receiver) Simulate(time gtk.GameTime) {
    dt := time.Delta.Seconds()
-   
-   //update car movement
-   position := r.Car.Position
-   velocity := r.Car.Velocity
-   
-   carFront := glm.Vec4d{0,1,0,0}
-   engineForce := carFront.Mul(r.Car.EngineForce)
-   var breakForce glm.Vec4d
-   if !velocity.ApproxEqual(glm.Vec4d{}) {
-      breakForce = velocity.Normalize().Mul(-r.Car.BreakForce)
-   } else {
-      velocity = glm.Vec4d{}
-   }
-   
-   mass := CarMass
-   force := engineForce.Add(breakForce)
-   acceleration := force.Mul(1.0 / mass)
-   
-   position = position.Add(velocity.Mul(dt)).Add(acceleration.Mul(dt*dt/2))
-   velocity = velocity.Add(acceleration.Mul(dt))
-   
-   r.Car.Position = position
-   r.Car.Velocity = velocity
-   r.SetCarTransform(glm.Translate3Dd(position[0], position[1], position[2]))
+   r.Car.Simulate(r.UIState.Controls, dt)
+   r.SetCarTransform()
    
    //camera
    if r.UIState.IsRotating {
@@ -171,7 +134,9 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
    r.Data.Cameraview = t.Mul4(rotation)
 }
 
-func (r *Receiver) SetCarTransform(m glm.Mat4d) {
+func (r *Receiver) SetCarTransform() {
+   p := r.Car.Center
+   m := glm.Translate3Dd(p[0], p[1], p[2])
    r.Data.Car.Transform = m
 }
 
@@ -191,27 +156,27 @@ func (r *Receiver) Quit() {
 }
 
 func (r *Receiver) PushFuelPedal() {
-   r.Car.EngineForce += MaximumEngineForce
+   r.UIState.Controls.FuelPedal++
 }
 
 func (r *Receiver) ReleaseFuelPedal() {
-   r.Car.EngineForce -= MaximumEngineForce
+   r.UIState.Controls.FuelPedal--
 }
 
 func (r *Receiver) PushReversePedal() {
-   r.Car.EngineForce -= MaximumEngineForce
+   r.UIState.Controls.FuelPedal--
 }
 
 func (r *Receiver) ReleaseReversePedal() {
-   r.Car.EngineForce += MaximumEngineForce
+   r.UIState.Controls.FuelPedal++
 }
 
 func (r *Receiver) PushBreakPedal() {
-   r.Car.BreakForce += MaximumBreakForce
+   r.UIState.Controls.BreakPedal++
 }
 
 func (r *Receiver) ReleaseBreakPedal() {
-   r.Car.BreakForce -= MaximumBreakForce
+   r.UIState.Controls.BreakPedal--
 }
 
 func (r *Receiver) ToggleRotate() {
