@@ -15,10 +15,13 @@ func main() {
 }
 
 type Receiver struct {
+   Window   *glfw.Window
    Data     DataBindings
    Shaders  gtk.ShaderLibrary
    SceneLoc SceneBindings
    Car      Car
+   Controls  gtk.ControlBindings
+   UIState  UIState
 }
 
 type DataBindings struct {
@@ -40,6 +43,11 @@ type Car struct {
    Orientation glm.Quatd
 }
 
+type UIState struct {
+   IsRotating bool
+   Theta      float64
+}
+
 const (
    PROGRAM_SCENE = "scene"
    FOV = 60
@@ -48,6 +56,7 @@ const (
 )
 
 func (r *Receiver) Init(window *glfw.Window) {
+   r.Window = window
    gtk.Bind(&r.Data)
    r.Shaders = gtk.NewShaderLibrary()
    r.Shaders.LoadProgram(PROGRAM_SCENE, "scene.v.glsl", "scene.f.glsl")
@@ -62,10 +71,20 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Scene, err = gtk.LoadSceneAsModel("car.dae")
    if err != nil { panic(err) }
    
-   r.Car = Car {
+   r.Car = Car{
       glm.Vec4d{0,0,0,1},
       glm.QuatIdentd(),
    }
+   r.ResetKeyBindingDefaults()
+}
+
+func (r *Receiver) ResetKeyBindingDefaults() {
+   c := &r.Controls
+   c.ResetBindings()
+   c.BindKeyPress(glfw.KeyW, r.PushFuelPedal, r.ReleaseFuelPedal)
+   c.BindKeyPress(glfw.KeyS, r.PushBreakPedal, r.ReleaseBreakPedal)
+   c.BindKeyPress(glfw.KeySpace, r.ToggleRotate, nil)
+   c.BindKeyPress(glfw.KeyEscape, r.Quit, nil)
 }
 
 func (r *Receiver) Draw(window *glfw.Window) {
@@ -95,24 +114,28 @@ func (r *Receiver) MouseMove(window *glfw.Window, xpos float64, ypos float64) {
 }
 
 func (r *Receiver) KeyPress(window *glfw.Window, k glfw.Key, s int, action glfw.Action, mods glfw.ModifierKey) {
+   r.Controls.DoKeyAction(k, action)
 }
 
 func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
 }
 
 func (r *Receiver) Simulate(time gtk.GameTime) {
-   period := 5.0
-   elapsed := time.Elapsed.Seconds()
-   theta := elapsed * 360 / period
+   dt := time.Delta.Seconds()
+   
+   if r.UIState.IsRotating {
+      period := 5.0
+      dtheta := dt * 360 / period
+      r.UIState.Theta += dtheta
+   }
+   
    p := glm.Vec4d{0,2,6,1}
-   rotation := glm.HomogRotate3DYd(theta)
-   r.Car.Position = p
+   rotation := glm.HomogRotate3DYd(r.UIState.Theta)
    t := glm.Translate3Dd(-p[0], -p[1], -p[2])
    r.Data.Cameraview = t.Mul4(rotation)
 }
 
 func (r *Receiver) OnClose(window *glfw.Window) {
-   
 }
 
 func (r *Receiver) IsIdle() bool {
@@ -121,4 +144,28 @@ func (r *Receiver) IsIdle() bool {
 
 func (r *Receiver) NeedsRender() bool {
    return true
+}
+
+func (r *Receiver) Quit() {
+   r.Window.SetShouldClose(true)
+}
+
+func (r *Receiver) PushFuelPedal() {
+   //TODO
+}
+
+func (r *Receiver) ReleaseFuelPedal() {
+   //TODO
+}
+
+func (r *Receiver) PushBreakPedal() {
+   //TODO
+}
+
+func (r *Receiver) ReleaseBreakPedal() {
+   //TODO
+}
+
+func (r *Receiver) ToggleRotate() {
+   r.UIState.IsRotating = !r.UIState.IsRotating
 }
