@@ -27,6 +27,7 @@ type Receiver struct {
 type DataBindings struct {
    Vao  gl.VertexArrayObject
    Scene *gtk.Model
+   Car *gtk.Model
    Projection glm.Mat4d
    Cameraview glm.Mat4d
 }
@@ -73,9 +74,11 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Cameraview = glm.Ident4d()
    
    r.Data.Scene = gtk.EmptyModel()
-   var err error
-   r.Data.Scene, err = gtk.LoadSceneAsModel("car.dae")
+   model, err := gtk.LoadSceneAsModel("car.dae")
    if err != nil { panic(err) }
+   r.Data.Scene.AddChild(model)
+   r.Data.Car = model.Children[0]
+   r.Data.Scene.AddGeometry(gtk.Grid(10))
    
    r.Car = Car{
       glm.Vec4d{0,0,0,1},
@@ -106,10 +109,8 @@ func (r *Receiver) Draw(window *glfw.Window) {
    r.Shaders.UseProgram(ProgramScene)
    gl.UniformMatrix4fv(r.SceneLoc.Projection, 1, gl.FALSE, gtk.MatArray(r.Data.Projection))
    gl.UniformMatrix4fv(r.SceneLoc.Cameraview, 1, gl.FALSE, gtk.MatArray(r.Data.Cameraview))
-   mv := glm.Ident4d()
-   gl.UniformMatrix4fv(r.SceneLoc.Worldview, 1, gl.FALSE, gtk.MatArray(mv))
    gtk.PanicOnError()
-   gtk.DrawModel(mv, r.Data.Scene, r.SceneLoc.Worldview, r.SceneLoc.Position, r.Data.Vao)
+   gtk.DrawModel(glm.Ident4d(), r.Data.Scene, r.SceneLoc.Worldview, r.SceneLoc.Position, r.Data.Vao)
 }
 
 func (r *Receiver) Reshape(window *glfw.Window, width, height int) {
@@ -171,7 +172,7 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
 }
 
 func (r *Receiver) SetCarTransform(m glm.Mat4d) {
-   r.Data.Scene.Children[0].Transform = m
+   r.Data.Car.Transform = m
 }
 
 func (r *Receiver) OnClose(window *glfw.Window) {
