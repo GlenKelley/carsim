@@ -39,11 +39,11 @@ type Controls struct {
 func NewCar() Car {
    return Car {
       Profile {
-         1000,
-         5000,
+         100,
+         500,
          0.4257,
          12.8,
-         10000,
+         1000,
          1,
          1,
          1,
@@ -82,7 +82,7 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    
    e := emax * controls.FuelPedal
    b := bmax * controls.BreakPedal
-   
+
    vn := glm.Vec4d{}
    if !IsZero(v) {
       vn = v.Normalize()
@@ -94,16 +94,23 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    maxRearTyreTraction := mu * weight
    rearForceTraction := math.Copysign(math.Min(math.Abs(e), maxRearTyreTraction), e)
    forceTraction := u.Mul(rearForceTraction)
-
+   
+   forceBreaking := u.Mul(-b * vn.Dot(u))
    forceDrag := v.Mul(-d * vmag)
    forceRollingResistance := v.Mul(-rr)
-   forceBreaking := u.Mul(-b * vn.Dot(u))
    
    force := forceTraction.Add(forceDrag).Add(forceRollingResistance).Add(forceBreaking)
    
    a := force.Mul(1.0/m)
-   p = p.Add(v.Mul(dt)).Add(a.Mul(dt*dt*0.5))
-   v = v.Add(a.Mul(dt))
+   dv := a.Mul(dt)
+   dp := v.Mul(dt).Add(a.Mul(dt*dt*0.5))
+
+   if v.Len() < forceBreaking.Len()*dt/m {
+      dv = v.Mul(-1)
+   }
+   
+   p = p.Add(dp)
+   v = v.Add(dv)
    
    car.Center = p
    car.Velocity = v
