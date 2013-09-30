@@ -41,6 +41,7 @@ type SceneBindings struct {
 type Car struct {
    Position  glm.Vec4d
    Orientation glm.Quatd
+   Velocity glm.Vec4d
 }
 
 type UIState struct {
@@ -74,6 +75,7 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Car = Car{
       glm.Vec4d{0,0,0,1},
       glm.QuatIdentd(),
+      glm.Vec4d{},
    }
    r.ResetKeyBindingDefaults()
 }
@@ -129,10 +131,18 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
       r.UIState.Theta += dtheta
    }
    
+   r.Car.Position = r.Car.Position.Add(r.Car.Velocity.Mul(dt))
+   cp := r.Car.Position
+   r.SetCarTransform(glm.Translate3Dd(cp[0], cp[1], cp[2]))
+   
    p := glm.Vec4d{0,2,6,1}
    rotation := glm.HomogRotate3DYd(r.UIState.Theta)
    t := glm.Translate3Dd(-p[0], -p[1], -p[2])
    r.Data.Cameraview = t.Mul4(rotation)
+}
+
+func (r *Receiver) SetCarTransform(m glm.Mat4d) {
+   r.Data.Scene.Children[0].Transform = m
 }
 
 func (r *Receiver) OnClose(window *glfw.Window) {
@@ -151,19 +161,19 @@ func (r *Receiver) Quit() {
 }
 
 func (r *Receiver) PushFuelPedal() {
-   //TODO
+   r.Car.Velocity[1]++
 }
 
 func (r *Receiver) ReleaseFuelPedal() {
-   //TODO
+   r.Car.Velocity[1]--
 }
 
 func (r *Receiver) PushBreakPedal() {
-   //TODO
+   r.Car.Velocity[1]--
 }
 
 func (r *Receiver) ReleaseBreakPedal() {
-   //TODO
+   r.Car.Velocity[1]++
 }
 
 func (r *Receiver) ToggleRotate() {
