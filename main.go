@@ -42,6 +42,8 @@ type Car struct {
    Position  glm.Vec4d
    Orientation glm.Quatd
    Velocity glm.Vec4d
+   EngineForce float64
+   BreakForce float64
 }
 
 type UIState struct {
@@ -50,18 +52,21 @@ type UIState struct {
 }
 
 const (
-   PROGRAM_SCENE = "scene"
-   FOV = 60
-   NEAR = 0.1
-   FAR = 100
+   ProgramScene = "scene"
+   Fov = 60
+   Near = 0.1
+   Far = 100
+   CarMass = 1.0
+   MaximumEngineForce = 10
+   MaximumBreakForce = 10
 )
 
 func (r *Receiver) Init(window *glfw.Window) {
    r.Window = window
    gtk.Bind(&r.Data)
    r.Shaders = gtk.NewShaderLibrary()
-   r.Shaders.LoadProgram(PROGRAM_SCENE, "scene.v.glsl", "scene.f.glsl")
-   r.Shaders.BindProgramLocations(PROGRAM_SCENE, &r.SceneLoc)
+   r.Shaders.LoadProgram(ProgramScene, "scene.v.glsl", "scene.f.glsl")
+   r.Shaders.BindProgramLocations(ProgramScene, &r.SceneLoc)
    gtk.PanicOnError()
    
    r.Data.Projection = glm.Ident4d()
@@ -76,6 +81,8 @@ func (r *Receiver) Init(window *glfw.Window) {
       glm.Vec4d{0,0,0,1},
       glm.QuatIdentd(),
       glm.Vec4d{},
+      0.0,
+      0.0,
    }
    r.ResetKeyBindingDefaults()
 }
@@ -84,8 +91,9 @@ func (r *Receiver) ResetKeyBindingDefaults() {
    c := &r.Controls
    c.ResetBindings()
    c.BindKeyPress(glfw.KeyW, r.PushFuelPedal, r.ReleaseFuelPedal)
-   c.BindKeyPress(glfw.KeyS, r.PushBreakPedal, r.ReleaseBreakPedal)
-   c.BindKeyPress(glfw.KeySpace, r.ToggleRotate, nil)
+   c.BindKeyPress(glfw.KeyS, r.PushReversePedal, r.ReleaseReversePedal)
+   c.BindKeyPress(glfw.KeySpace, r.PushBreakPedal, r.ReleaseBreakPedal)
+   c.BindKeyPress(glfw.KeyR, r.ToggleRotate, nil)
    c.BindKeyPress(glfw.KeyEscape, r.Quit, nil)
 }
 
@@ -95,7 +103,7 @@ func (r *Receiver) Draw(window *glfw.Window) {
    gl.Enable(gl.DEPTH_TEST)
    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
    
-   r.Shaders.UseProgram(PROGRAM_SCENE)
+   r.Shaders.UseProgram(ProgramScene)
    gl.UniformMatrix4fv(r.SceneLoc.Projection, 1, gl.FALSE, gtk.MatArray(r.Data.Projection))
    gl.UniformMatrix4fv(r.SceneLoc.Cameraview, 1, gl.FALSE, gtk.MatArray(r.Data.Cameraview))
    mv := glm.Ident4d()
@@ -106,7 +114,7 @@ func (r *Receiver) Draw(window *glfw.Window) {
 
 func (r *Receiver) Reshape(window *glfw.Window, width, height int) {
    aspectRatio := gtk.WindowAspectRatio(window)
-   r.Data.Projection = glm.Perspectived(FOV, aspectRatio, NEAR, FAR)
+   r.Data.Projection = glm.Perspectived(Fov, aspectRatio, Near, Far)
 }
 
 func (r *Receiver) MouseClick(window *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
@@ -125,15 +133,36 @@ func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
 func (r *Receiver) Simulate(time gtk.GameTime) {
    dt := time.Delta.Seconds()
    
+   //update car movement
+   position := r.Car.Position
+   velocity := r.Car.Velocity
+   
+   carFront := glm.Vec4d{0,1,0,0}
+   engineForce := carFront.Mul(r.Car.EngineForce)
+   var breakForce glm.Vec4d
+   if !velocity.ApproxEqual(glm.Vec4d{}) {
+      breakForce = velocity.Normalize().Mul(-r.Car.BreakForce)
+   } else {
+      velocity = glm.Vec4d{}
+   }
+   
+   mass := CarMass
+   force := engineForce.Add(breakForce)
+   acceleration := force.Mul(1.0 / mass)
+   
+   position = position.Add(velocity.Mul(dt)).Add(acceleration.Mul(dt*dt/2))
+   velocity = velocity.Add(acceleration.Mul(dt))
+   
+   r.Car.Position = position
+   r.Car.Velocity = velocity
+   r.SetCarTransform(glm.Translate3Dd(position[0], position[1], position[2]))
+   
+   //camera
    if r.UIState.IsRotating {
       period := 5.0
       dtheta := dt * 360 / period
       r.UIState.Theta += dtheta
    }
-   
-   r.Car.Position = r.Car.Position.Add(r.Car.Velocity.Mul(dt))
-   cp := r.Car.Position
-   r.SetCarTransform(glm.Translate3Dd(cp[0], cp[1], cp[2]))
    
    p := glm.Vec4d{0,2,6,1}
    rotation := glm.HomogRotate3DYd(r.UIState.Theta)
@@ -161,19 +190,27 @@ func (r *Receiver) Quit() {
 }
 
 func (r *Receiver) PushFuelPedal() {
-   r.Car.Velocity[1]++
+   r.Car.EngineForce += MaximumEngineForce
 }
 
 func (r *Receiver) ReleaseFuelPedal() {
-   r.Car.Velocity[1]--
+   r.Car.EngineForce -= MaximumEngineForce
+}
+
+func (r *Receiver) PushReversePedal() {
+   r.Car.EngineForce -= MaximumEngineForce
+}
+
+func (r *Receiver) ReleaseReversePedal() {
+   r.Car.EngineForce += MaximumEngineForce
 }
 
 func (r *Receiver) PushBreakPedal() {
-   r.Car.Velocity[1]--
+   r.Car.BreakForce += MaximumBreakForce
 }
 
 func (r *Receiver) ReleaseBreakPedal() {
-   r.Car.Velocity[1]++
+   r.Car.BreakForce -= MaximumBreakForce
 }
 
 func (r *Receiver) ToggleRotate() {
