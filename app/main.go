@@ -64,7 +64,7 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Projection = glm.Ident4d()
    r.Data.Cameraview = glm.Ident4d()
    
-   r.Data.Scene = gtk.EmptyModel()
+   r.Data.Scene = gtk.EmptyModel("root")
    model, err := gtk.LoadSceneAsModel("drivetrain.dae")
    if err != nil { panic(err) }
    r.Data.Scene.AddChild(model)
@@ -128,7 +128,7 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
       r.UIState.Theta += dtheta
    }
    
-   p := glm.Vec4d{0,2,6,1}
+   p := glm.Vec4d{0,5,12,2}
    rotation := glm.HomogRotate3DYd(r.UIState.Theta)
    t := glm.Translate3Dd(-p[0], -p[1], -p[2])
    r.Data.Cameraview = t.Mul4(rotation)
