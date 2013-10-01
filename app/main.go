@@ -1,7 +1,10 @@
 package main
 
 import (
+   "os"
    "fmt"
+   "math"
+   "encoding/json"
    glfw "github.com/go-gl/glfw3"
    gtk "github.com/GlenKelley/go-glutil"
    gl "github.com/GlenKelley/go-gl/gl32"
@@ -15,6 +18,12 @@ func main() {
    gtk.CreateWindow(640, 480, "carsim", false, receiver)
 }
 
+func panicOnErr(err error) {
+   if err != nil {
+      panic(err)
+   }
+}
+
 type Receiver struct {
    Window   *glfw.Window
    Data     DataBindings
@@ -22,8 +31,21 @@ type Receiver struct {
    SceneLoc SceneBindings
    Car      sim.Car
    Controls  gtk.ControlBindings
+   Constants Constants
    UIState  UIState
 }
+
+type Constants struct {
+   PanSensitivity float64
+   Fov float64
+   Near float64
+   Far float64
+}
+var DefaultConstants = Constants{10, 60, 0.1, 100}
+
+const (
+   ProgramScene = "scene"
+)
 
 type DataBindings struct {
    Vao  gl.VertexArrayObject
@@ -41,20 +63,16 @@ type SceneBindings struct {
 }
 
 type UIState struct {
-   IsRotating bool
-   Theta      float64
    Controls   sim.Controls
+   PanAxis   glm.Vec4d
+   TiltAxis  glm.Vec4d
+   Orientation glm.Quatd
+   CameraDistance float64
 }
-
-const (
-   ProgramScene = "scene"
-   Fov = 60
-   Near = 0.1
-   Far = 100
-)
 
 func (r *Receiver) Init(window *glfw.Window) {
    r.Window = window
+   r.LoadConfiguration("gameconf.json")
    gtk.Bind(&r.Data)
    r.Shaders = gtk.NewShaderLibrary()
    r.Shaders.LoadProgram(ProgramScene, "scene.v.glsl", "scene.f.glsl")
@@ -73,6 +91,40 @@ func (r *Receiver) Init(window *glfw.Window) {
    
    r.Car = sim.NewCar()
    r.ResetKeyBindingDefaults()
+   
+   r.UIState = UIState{
+      sim.Controls{},
+      glm.Vec4d{0,1,0,0},
+      glm.Vec4d{1,0,0,0},
+      glm.QuatIdentd(),
+      10,
+   }
+}
+
+func (r *Receiver) LoadConfiguration(confFile string) {
+   r.Constants = DefaultConstants
+   r.ResetKeyBindingDefaults()
+   file, err := os.Open(confFile)
+   if err == nil {
+      defer file.Close()
+      decoder := json.NewDecoder(file)
+      root := map[string]interface{}{}
+      err = decoder.Decode(&root)
+      panicOnErr(err)
+      if constants, ok := root["constants"]; ok {
+         bytes, err := json.Marshal(constants)
+         panicOnErr(err)
+         err = json.Unmarshal(bytes, &r.Constants)
+         panicOnErr(err)
+      }
+      if controls, ok := root["controls"]; ok {
+         sc := make(map[string]string)
+         for k, v := range controls.(map[string]interface{}) {
+            sc[k] = v.(string)
+         }
+         r.Controls.Apply(r, sc)
+      }
+   }
 }
 
 func (r *Receiver) ResetKeyBindingDefaults() {
@@ -81,8 +133,9 @@ func (r *Receiver) ResetKeyBindingDefaults() {
    c.BindKeyPress(glfw.KeyW, r.PushFuelPedal, r.ReleaseFuelPedal)
    c.BindKeyPress(glfw.KeyS, r.PushReversePedal, r.ReleaseReversePedal)
    c.BindKeyPress(glfw.KeySpace, r.PushBreakPedal, r.ReleaseBreakPedal)
-   c.BindKeyPress(glfw.KeyR, r.ToggleRotate, nil)
    c.BindKeyPress(glfw.KeyEscape, r.Quit, nil)
+   c.BindMouseMovement(r.PanView)
+   c.BindScroll(r.Zoom)
 }
 
 func (r *Receiver) Draw(window *glfw.Window) {
@@ -100,13 +153,15 @@ func (r *Receiver) Draw(window *glfw.Window) {
 
 func (r *Receiver) Reshape(window *glfw.Window, width, height int) {
    aspectRatio := gtk.WindowAspectRatio(window)
-   r.Data.Projection = glm.Perspectived(Fov, aspectRatio, Near, Far)
+   r.Data.Projection = glm.Perspectived(r.Constants.Fov, aspectRatio, r.Constants.Near, r.Constants.Far)
 }
 
 func (r *Receiver) MouseClick(window *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
+   r.Controls.DoMouseButtonAction(button, action)
 }
 
 func (r *Receiver) MouseMove(window *glfw.Window, xpos float64, ypos float64) {
+   r.Controls.DoMouseMoveAction(window, xpos, ypos)
 }
 
 func (r *Receiver) KeyPress(window *glfw.Window, k glfw.Key, s int, action glfw.Action, mods glfw.ModifierKey) {
@@ -114,6 +169,7 @@ func (r *Receiver) KeyPress(window *glfw.Window, k glfw.Key, s int, action glfw.
 }
 
 func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
+   r.Controls.DoScrollAction(xoff, yoff)
 }
 
 func (r *Receiver) Simulate(time gtk.GameTime) {
@@ -121,23 +177,33 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
    r.Car.Simulate(r.UIState.Controls, dt)
    r.SetCarTransform()
    
-   //camera
-   if r.UIState.IsRotating {
-      period := 5.0
-      dtheta := dt * 360 / period
-      r.UIState.Theta += dtheta
-   }
    
-   p := glm.Vec4d{0,5,12,2}
-   rotation := glm.HomogRotate3DYd(r.UIState.Theta)
+   c := r.Data.Car.WorldTransform().Mul4x1(glm.Vec4d{0,0,0,1})
+   p := glm.Vec4d{0,0,1,0}.Mul(r.UIState.CameraDistance)
+   rotation := r.UIState.Orientation.Conjugate().Mat4()
    t := glm.Translate3Dd(-p[0], -p[1], -p[2])
-   r.Data.Cameraview = t.Mul4(rotation)
+   r.Data.Cameraview = t.Mul4(rotation).Mul4(glm.Translate3Dd(-c[0], -c[1], -c[2]))
 }
 
 func (r *Receiver) SetCarTransform() {
    p := r.Car.Center
    m := glm.Translate3Dd(p[0], p[1], p[2])
    r.Data.Car.Transform = m
+}
+
+
+func (r *Receiver) PanView(pos, delta glm.Vec2d) {
+   theta := delta.Mul(r.Constants.PanSensitivity * r.Constants.Fov)
+   
+   turnV := glm.QuatRotated(theta[1], gtk.ToVec3D(r.UIState.TiltAxis))
+   turnH := glm.QuatRotated(-theta[0], gtk.ToVec3D(r.UIState.PanAxis))
+   
+   r.UIState.Orientation = turnH.Mul(r.UIState.Orientation).Mul(turnV)
+}
+
+func (r *Receiver) Zoom(xoff, yoff float64) {
+   f := math.Max(0.1, math.Exp2(-yoff/16))
+   r.UIState.CameraDistance *= f
 }
 
 func (r *Receiver) OnClose(window *glfw.Window) {
@@ -177,8 +243,4 @@ func (r *Receiver) PushBreakPedal() {
 
 func (r *Receiver) ReleaseBreakPedal() {
    r.UIState.Controls.BreakPedal--
-}
-
-func (r *Receiver) ToggleRotate() {
-   r.UIState.IsRotating = !r.UIState.IsRotating
 }
