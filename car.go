@@ -1,7 +1,6 @@
 package car
 
 import (
-   "fmt"
    "math"
    glm "github.com/Jragonmiris/mathgl"
 )
@@ -21,11 +20,13 @@ type Profile struct {
    RearAxelDisplacement  float64 //m
    FrontAxelDisplacement float64 //m
    TyreFrictionMu        float64 
+   TyreTractionConstant    float64
    
    GearRatio               float64
    DifferentialRatio       float64
    TransmissionEfficiency  float64
    WheelRadius             float64
+   WheelMass               float64
 
 }
 
@@ -34,6 +35,7 @@ type Car struct {
    Center    glm.Vec4d
    Velocity  glm.Vec4d
    Direction glm.Vec4d
+   RearWheelAngularVelocity float64
    //Transient properties for numerical integration
    TransientAcceleration glm.Vec4d
 }
@@ -67,14 +69,17 @@ func NewCar() Car {
          1,
          1,
          1,
+         1,
          2.66,
          3.42,
          0.7,
          0.34,
+         1,
       },
       glm.Vec4d{0,0,0,1},
       glm.Vec4d{0,0,0,0},
       glm.Vec4d{0,1,0,0},
+      0,
       glm.Vec4d{0,0,0,0},
    }
 }
@@ -88,6 +93,7 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    v := car.Velocity
    u := car.Direction
    at := car.TransientAcceleration
+   rwav := car.RearWheelAngularVelocity
    m := car.Profile.Mass
    d := car.Profile.Drag
    rr := car.Profile.RollingResistance
@@ -98,8 +104,11 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    xd := car.Profile.DifferentialRatio
    te := car.Profile.TransmissionEfficiency
    wr := car.Profile.WheelRadius
+   wm := car.Profile.WheelMass
    bmax := car.Profile.BreakingPower
+   bmaxToruqe := bmax / wr
    mu := car.Profile.TyreFrictionMu
+   tc := car.Profile.TyreTractionConstant
    g := Gravity
    dt := timestep
    vmag := v.Len()
@@ -107,12 +116,24 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    staticWeight := g * m
    axelDisplacement := fl + rl
    
-   rearWheelFrequency := math.Abs(v.Dot(u)/wr)
-   rpm := rearWheelFrequency * xg * xd * 60 / (2 * math.Pi)
-   fmt.Println(rpm)
+   // maxFrontTyreTraction := rl / axelDisplacement * weight - h/axelLength * m * at.Dot(u)
+   dynamicWeight := h / axelDisplacement * m * at.Dot(u)
+   weight := fl / axelDisplacement * staticWeight + dynamicWeight
+   maxRearTyreTraction := mu * weight
+   
+   slipRatio := (rwav * wr - v.Dot(u)) / vmag
+   tractionForce := math.Min(tc * slipRatio, maxRearTyreTraction)
+   tractionTorque := tractionForce * wr
+   
+   brakeTorque := bmaxToruqe * controls.BreakPedal
+
+   rpm := rwav * xg * xd * 60 / (2 * math.Pi)
    engineTorque := car.Profile.Engine.Torque(rpm)
    appliedTorque := engineTorque * controls.FuelPedal
-   driveForce := appliedTorque * xg * xd * te / wr
+   driveTorque := appliedTorque * xg * xd * te
+   driveForce := driveTorque / wr
+
+   totalTorque := driveTorque + 2 * tractionTorque + brakeTorque
    
    b := bmax * controls.BreakPedal
 
@@ -121,10 +142,6 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
       vn = v.Normalize()
    }
    
-   // maxFrontTyreTraction := rl / axelDisplacement * weight - h/axelLength * m * at.Dot(u)
-   dynamicWeight := h / axelDisplacement * m * at.Dot(u)
-   weight := fl / axelDisplacement * staticWeight + dynamicWeight
-   maxRearTyreTraction := mu * weight
    rearForceTraction := math.Copysign(math.Min(math.Abs(driveForce), maxRearTyreTraction), driveForce)
    forceTraction := u.Mul(rearForceTraction)
    
@@ -133,19 +150,24 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    forceRollingResistance := v.Mul(-rr)
    
    force := forceTraction.Add(forceDrag).Add(forceRollingResistance).Add(forceBreaking)
+
+   rearWheelInertia := wm * wr * wr / 2
+   wheelAcceleration := totalTorque / rearWheelInertia
+   drwav := wheelAcceleration * dt
    
    a := force.Mul(1.0/m)
    dv := a.Mul(dt)
    dp := v.Mul(dt).Add(a.Mul(dt*dt*0.5))
-
    if v.Len() < forceBreaking.Len()*dt/m {
       dv = v.Mul(-1)
    }
    
    p = p.Add(dp)
    v = v.Add(dv)
+   rwav = rwav + drwav
    
    car.Center = p
    car.Velocity = v
    car.TransientAcceleration = a
+   car.RearWheelAngularVelocity = rwav
 }
