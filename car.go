@@ -1,6 +1,7 @@
 package car
 
 import (
+   // "fmt"
    "math"
    glm "github.com/Jragonmiris/mathgl"
 )
@@ -36,6 +37,10 @@ type Car struct {
    Velocity  glm.Vec4d
    Direction glm.Vec4d
    RearWheelAngularVelocity float64
+   RearWheelAngularDeviation float64
+   FrontWheelAngularDeviation float64
+   FrontWheelO float64
+   
    //Transient properties for numerical integration
    TransientAcceleration glm.Vec4d
 }
@@ -47,38 +52,65 @@ type Controls struct {
 
 type EngineProfile interface {
    Torque(rpm float64) float64
+   StallingRPM() float64
 }
 
 type SimpleEngine struct {
    torque float64
+   stallingRPM float64
 }
 
 func (engine *SimpleEngine) Torque(rpm float64) float64 {
    return engine.torque
 }
 
+func (engine *SimpleEngine) StallingRPM() float64 {
+   return engine.stallingRPM
+}
+
 func NewCar() Car {
    return Car {
       Profile {
-         1500,
-         &SimpleEngine{448},
-         0.4257,
-         12.8,
-         10000,
-         1,
-         1,
-         1,
-         1,
-         1,
-         2.66,
-         3.42,
-         0.7,
-         0.34,
-         1,
+         1500,                      //Mass Kg
+         &SimpleEngine{448, 1000},  //Engine N, rpm
+         0.4257,  //Drag
+         120.8,    //rolling friction
+         10000,   //breaking power N
+         1,       //center of gravity height m
+         3,       //rear axel 
+         3,       //front axel
+         10000,   //type friction mu
+         1,   //tyre traction constant
+         2.66,    //gear ratio
+         3.42,    //diff ratio
+         0.7,     //efficiency
+         1,//0.34,    //wheel radius
+         150,      //whell mass
+
+         // Mass              float64 //Kg
+         // Engine            EngineProfile
+         // Drag              float64 
+         // RollingResistance float64 
+         // BreakingPower     float64 //N
+         //    
+         // CenterOfGravityHeight float64 //m
+         // RearAxelDisplacement  float64 //m
+         // FrontAxelDisplacement float64 //m
+         // TyreFrictionMu        float64 
+         // TyreTractionConstant    float64
+         //    
+         // GearRatio               float64
+         // DifferentialRatio       float64
+         // TransmissionEfficiency  float64
+         // WheelRadius             float64
+         // WheelMass               float64
       },
-      glm.Vec4d{0,0,0,1},
+      glm.Vec4d{0,0,1,1},
       glm.Vec4d{0,0,0,0},
       glm.Vec4d{0,1,0,0},
+      0,
+      0,
+      0,
       0,
       glm.Vec4d{0,0,0,0},
    }
@@ -113,6 +145,7 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    dt := timestep
    vmag := v.Len()
    
+   
    staticWeight := g * m
    axelDisplacement := fl + rl
    
@@ -120,27 +153,43 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    dynamicWeight := (h-wr) / axelDisplacement * m * at.Dot(u)
    weight := fl / axelDisplacement * staticWeight + dynamicWeight
    maxRearTyreTraction := mu * weight
-   
-   slipRatio := (rwav * wr - v.Dot(u)) / vmag
+
+   freeRollingAV := v.Dot(u) / wr
+   rwav = freeRollingAV
+   slipRatio := 0.0
+   if !IsZero(v) {
+      slipRatio = (rwav * wr - v.Dot(u)) / vmag
+   }
+   //  else {
+   //    // slipRatio = rwav * wr //-rwav * wr
+   // }
    tractionForce := math.Min(tc * slipRatio, maxRearTyreTraction)
    tractionTorque := tractionForce * wr
-   
-   brakeTorque := bmaxToruqe * controls.BreakPedal
-
-   rpm := rwav * xg * xd * 60 / (2 * math.Pi)
-   engineTorque := car.Profile.Engine.Torque(rpm)
-   appliedTorque := engineTorque * controls.FuelPedal
-   driveTorque := appliedTorque * xg * xd * te
-   driveForce := driveTorque / wr
-
-   totalTorque := driveTorque + 2 * tractionTorque + brakeTorque
-   
-   b := bmax * controls.BreakPedal
+   // fmt.Println("tyre traction force", tractionForce)
 
    vn := glm.Vec4d{}
    if !IsZero(v) {
       vn = v.Normalize()
    }
+   
+   brakeTorque := bmaxToruqe * vn.Dot(u) * controls.BreakPedal
+
+   rpm := freeRollingAV * xg * xd * 60 / (2 * math.Pi)
+   engineTorque := car.Profile.Engine.Torque(rpm)
+   
+   appliedTorque := engineTorque * controls.FuelPedal
+   driveTorque := appliedTorque * xg * xd * te
+   driveForce := driveTorque / wr
+   
+   totalTorque := driveTorque - 2 * tractionTorque - brakeTorque
+   
+   // fmt.Println("wrav", rwav)
+   // fmt.Println("driveTorque", driveTorque)
+   // fmt.Println("tractionTorque", tractionTorque)
+   // fmt.Println("brakeTorque", brakeTorque)
+   // fmt.Println("totalTorque", totalTorque)
+   
+   b := bmax * controls.BreakPedal
    
    rearForceTraction := math.Copysign(math.Min(math.Abs(driveForce), maxRearTyreTraction), driveForce)
    forceTraction := u.Mul(rearForceTraction)
@@ -162,12 +211,30 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
       dv = v.Mul(-1)
    }
    
+   // fmt.Println(rwav, dv)
+   
    p = p.Add(dp)
    v = v.Add(dv)
    rwav = rwav + drwav
+   
+   rwav = v.Dot(u) / wr
+   
+   car.FrontWheelO = 45 * math.Pi / 180
+   if car.FrontWheelO > 0.0001 {
+      turningRadius := axelDisplacement / math.Sin(car.FrontWheelO)
+      angularVelocity := math.Copysign(v.Len() / turningRadius, v.Dot(u))
+      rotation := dt * angularVelocity 
+      // fmt.Println("turning radius", turningRadius, rotation)
+      m := glm.HomogRotate3DZd(-rotation * 180 / math.Pi)
+      u = m.Mul4x1(u)
+      v = m.Mul4x1(v)
+   }
    
    car.Center = p
    car.Velocity = v
    car.TransientAcceleration = a
    car.RearWheelAngularVelocity = rwav
+   car.Direction = u
+   car.FrontWheelAngularDeviation += freeRollingAV * dt
+   car.RearWheelAngularDeviation += car.RearWheelAngularVelocity * dt 
 }

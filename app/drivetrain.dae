@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.65.0 r52859</authoring_tool>
     </contributor>
-    <created>2013-10-01T22:18:30</created>
-    <modified>2013-10-01T22:18:30</modified>
+    <created>2013-10-02T09:08:51</created>
+    <modified>2013-10-02T09:08:51</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -362,7 +362,7 @@
         <scale sid="scale">1 1 1</scale>
         <node id="Transmission" name="Transmission" type="NODE">
           <matrix sid="parentinverse">1 0 0 0 0 1 0 0 0 0 1 -1 0 0 0 1</matrix>
-          <translate sid="location">0 2 1</translate>
+          <translate sid="location">0 5 1</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -371,7 +371,7 @@
         </node>
         <node id="Engine" name="Engine" type="NODE">
           <matrix sid="parentinverse">1 0 0 0 0 1 0 0 0 0 1 -1 0 0 0 1</matrix>
-          <translate sid="location">0 3 1</translate>
+          <translate sid="location">0 6 1</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -380,7 +380,7 @@
         </node>
         <node id="Driveshaft" name="Driveshaft" type="NODE">
           <matrix sid="parentinverse">1 0 0 0 0 1 0 0 0 0 1 -1 0 0 0 1</matrix>
-          <translate sid="location">0 -0.7032741 1</translate>
+          <translate sid="location">0 2.296726 1</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -389,7 +389,7 @@
         </node>
         <node id="Differential" name="Differential" type="NODE">
           <matrix sid="parentinverse">1 0 0 0 0 1 0 0 0 0 1 -1 0 0 0 1</matrix>
-          <translate sid="location">0 -3 1</translate>
+          <translate sid="location">0 0 1</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -398,7 +398,7 @@
         </node>
         <node id="RearAxel" name="RearAxel" type="NODE">
           <matrix sid="parentinverse">1 0 0 0 0 1 0 0 0 0 1 -1 0 0 0 1</matrix>
-          <translate sid="location">0 -3 1</translate>
+          <translate sid="location">0 0 1</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -406,7 +406,7 @@
           <instance_geometry url="#Cylinder_001-mesh"/>
         </node>
         <node id="Wheel_FrontRight" name="Wheel_FrontRight" type="NODE">
-          <translate sid="location">2 3 0</translate>
+          <translate sid="location">2 6 0</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -414,7 +414,7 @@
           <instance_geometry url="#WheelMesh2-mesh"/>
         </node>
         <node id="Wheel_BackRight" name="Wheel_BackRight" type="NODE">
-          <translate sid="location">2 -3 0</translate>
+          <translate sid="location">2 0 0</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -422,7 +422,7 @@
           <instance_geometry url="#WheelMesh2-mesh"/>
         </node>
         <node id="Wheel_FrontLeft" name="Wheel_FrontLeft" type="NODE">
-          <translate sid="location">-2 3 0</translate>
+          <translate sid="location">-2 6 0</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>
@@ -430,7 +430,7 @@
           <instance_geometry url="#WheelMesh2-mesh"/>
         </node>
         <node id="Wheel_BackLeft" name="Wheel_BackLeft" type="NODE">
-          <translate sid="location">-2 -3 0</translate>
+          <translate sid="location">-2 0 0</translate>
           <rotate sid="rotationZ">0 0 1 0</rotate>
           <rotate sid="rotationY">0 1 0 0</rotate>
           <rotate sid="rotationX">1 0 0 0</rotate>

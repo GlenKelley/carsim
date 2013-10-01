@@ -50,7 +50,9 @@ const (
 type DataBindings struct {
    Vao  gl.VertexArrayObject
    Scene *gtk.Model
+   
    Car *gtk.Model
+   
    Projection glm.Mat4d
    Cameraview glm.Mat4d
 }
@@ -86,8 +88,10 @@ func (r *Receiver) Init(window *glfw.Window) {
    model, err := gtk.LoadSceneAsModel("drivetrain.dae")
    if err != nil { panic(err) }
    r.Data.Scene.AddChild(model)
-   r.Data.Car = model.Children[0]
-   r.Data.Scene.AddGeometry(gtk.Grid(10))
+   r.Data.Car, _ = model.FindModelWithName("Car")
+   grid := gtk.EmptyModel("Grid")
+   grid.AddGeometry(gtk.Grid(10))
+   r.Data.Scene.AddChild(grid)
    
    r.Car = sim.NewCar()
    r.ResetKeyBindingDefaults()
@@ -149,6 +153,9 @@ func (r *Receiver) Draw(window *glfw.Window) {
    gl.UniformMatrix4fv(r.SceneLoc.Cameraview, 1, gl.FALSE, gtk.MatArray(r.Data.Cameraview))
    gtk.PanicOnError()
    gtk.DrawModel(glm.Ident4d(), r.Data.Scene, r.SceneLoc.Worldview, r.SceneLoc.Position, r.Data.Vao)
+   // p := r.Data.Scene.Children[0].Transform.Mul4x1(r.Car.Center)
+   // m := glm.Translate3Dd(math.Ceil(p[0]/5)*5,0,math.Ceil(p[2]/5)*5)
+   // gtk.DrawModel(m, r.Data.Scene.Children[1], r.SceneLoc.Worldview, r.SceneLoc.Position, r.Data.Vao)
 }
 
 func (r *Receiver) Reshape(window *glfw.Window, width, height int) {
@@ -175,8 +182,7 @@ func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
 func (r *Receiver) Simulate(time gtk.GameTime) {
    dt := time.Delta.Seconds()
    r.Car.Simulate(r.UIState.Controls, dt)
-   r.SetCarTransform()
-   
+   r.SetCarTransform(dt)
    
    c := r.Data.Car.WorldTransform().Mul4x1(glm.Vec4d{0,0,0,1})
    p := glm.Vec4d{0,0,1,0}.Mul(r.UIState.CameraDistance)
@@ -185,10 +191,72 @@ func (r *Receiver) Simulate(time gtk.GameTime) {
    r.Data.Cameraview = t.Mul4(rotation).Mul4(glm.Translate3Dd(-c[0], -c[1], -c[2]))
 }
 
-func (r *Receiver) SetCarTransform() {
+
+func Cross3D(a, b glm.Vec4d) glm.Vec3d {
+	a3 := glm.Vec3d{a[0], a[1], a[2]}
+	b3 := glm.Vec3d{b[0], b[1], b[2]}
+	return a3.Cross(b3)
+}
+
+func Cross3Dv(a, b glm.Vec4d) glm.Vec4d {
+	c := Cross3D(a, b)
+	return glm.Vec4d{c[0], c[1], c[2], 0}
+}
+
+func NearZero(v glm.Vec3d) bool {
+	return v.ApproxEqual(glm.Vec3d{})
+}
+func RotationBetweenNormals(n1, n2 glm.Vec4d) glm.Mat4d {
+	axis := Cross3D(n1, n2)
+	dot := n1.Dot(n2)
+	if !NearZero(axis) {
+		angle := math.Acos(dot)
+		return glm.HomogRotate3Dd(angle, axis.Normalize())
+	} else if dot < 0 {
+		for e := 0; e < 3; e++ {
+			v := glm.Vec4d{}
+			v[e] = 1
+			cross := Cross3D(n1, v)
+			if !NearZero(cross) {
+				return glm.HomogRotate3Dd(math.Pi, cross.Normalize())
+			}
+		}
+		panic(fmt.Sprintln("no orthogonal axis found for normal", n1))
+	}
+	return glm.Ident4d()
+}
+func (r *Receiver) SetCarTransform(dt float64) {
    p := r.Car.Center
-   m := glm.Translate3Dd(p[0], p[1], p[2])
+   up := glm.Vec3d{0,0,1}
+   front := glm.Vec4d{0,1,0,0}
+   // u := glm.Vec3d{r.Car.Direction[0],r.Car.Direction[1],r.Car.Direction[2]}
+   rot := RotationBetweenNormals(front, r.Car.Direction)
+   m := glm.Translate3Dd(p[0], p[1], p[2]).Mul4(rot)
    r.Data.Car.Transform = m
+
+   fwav := r.Car.FrontWheelAngularDeviation
+   rwav := r.Car.RearWheelAngularDeviation
+   
+   fr := glm.HomogRotate3DXd(-fwav * 180 / math.Pi)
+   rr := glm.HomogRotate3DXd(-rwav * 180 / math.Pi)
+   
+   wheel, ok := r.Data.Car.FindModelWithName("Wheel_BackLeft")
+   if ok {
+      wheel.Transform = wheel.BaseTransform.Mul4(rr)
+   }
+   wheel, ok = r.Data.Car.FindModelWithName("Wheel_BackRight")
+   if ok {
+      wheel.Transform = wheel.BaseTransform.Mul4(rr)
+   }
+   wheel, ok = r.Data.Car.FindModelWithName("Wheel_FrontLeft")
+   ft := glm.HomogRotate3Dd(-r.Car.FrontWheelO, up)
+   if ok {
+      wheel.Transform = wheel.BaseTransform.Mul4(ft).Mul4(fr)
+   }
+   wheel, ok = r.Data.Car.FindModelWithName("Wheel_FrontRight")
+   if ok {
+      wheel.Transform = wheel.BaseTransform.Mul4(ft).Mul4(fr)
+   }
 }
 
 
