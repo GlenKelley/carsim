@@ -28,7 +28,7 @@ type Profile struct {
    TransmissionEfficiency  float64
    WheelRadius             float64
    WheelMass               float64
-
+   MaxStreeringAngle       float64
 }
 
 type Car struct {
@@ -48,6 +48,7 @@ type Car struct {
 type Controls struct {
    FuelPedal float64
    BreakPedal float64
+   WheelAngularVelocity float64
 }
 
 type EngineProfile interface {
@@ -74,7 +75,7 @@ func NewCar() Car {
          1500,                      //Mass Kg
          &SimpleEngine{448, 1000},  //Engine N, rpm
          0.4257,  //Drag
-         120.8,    //rolling friction
+         12.8,    //rolling friction
          10000,   //breaking power N
          1,       //center of gravity height m
          3,       //rear axel 
@@ -86,7 +87,7 @@ func NewCar() Car {
          0.7,     //efficiency
          1,//0.34,    //wheel radius
          150,      //whell mass
-
+         45 * math.Pi / 180, //max turning angle
          // Mass              float64 //Kg
          // Engine            EngineProfile
          // Drag              float64 
@@ -144,6 +145,7 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    g := Gravity
    dt := timestep
    vmag := v.Len()
+   
    
    
    staticWeight := g * m
@@ -219,12 +221,12 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    
    rwav = v.Dot(u) / wr
    
-   car.FrontWheelO = 45 * math.Pi / 180
-   if car.FrontWheelO > 0.0001 {
+   car.FrontWheelO = car.FrontWheelO + controls.WheelAngularVelocity * dt
+   car.FrontWheelO = math.Copysign(math.Min(math.Abs(car.FrontWheelO), car.Profile.MaxStreeringAngle), car.FrontWheelO)
+   if math.Abs(car.FrontWheelO) > 0.0001 {
       turningRadius := axelDisplacement / math.Sin(car.FrontWheelO)
-      angularVelocity := math.Copysign(v.Len() / turningRadius, v.Dot(u))
+      angularVelocity := v.Dot(u) / turningRadius
       rotation := dt * angularVelocity 
-      // fmt.Println("turning radius", turningRadius, rotation)
       m := glm.HomogRotate3DZd(-rotation * 180 / math.Pi)
       u = m.Mul4x1(u)
       v = m.Mul4x1(v)

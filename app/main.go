@@ -136,6 +136,8 @@ func (r *Receiver) ResetKeyBindingDefaults() {
    c.ResetBindings()
    c.BindKeyPress(glfw.KeyW, r.PushFuelPedal, r.ReleaseFuelPedal)
    c.BindKeyPress(glfw.KeyS, r.PushReversePedal, r.ReleaseReversePedal)
+   c.BindKeyPress(glfw.KeyA, r.TurnWheelLeft, r.StopTurnWheelLeft)
+   c.BindKeyPress(glfw.KeyD, r.TurnWheelRight, r.StopTurnWheelRight)
    c.BindKeyPress(glfw.KeySpace, r.PushBreakPedal, r.ReleaseBreakPedal)
    c.BindKeyPress(glfw.KeyEscape, r.Quit, nil)
    c.BindMouseMovement(r.PanView)
@@ -287,6 +289,22 @@ func (r *Receiver) NeedsRender() bool {
 
 func (r *Receiver) Quit() {
    r.Window.SetShouldClose(true)
+}
+
+func (r *Receiver) TurnWheelRight() {
+   r.UIState.Controls.WheelAngularVelocity++
+}
+
+func (r *Receiver) StopTurnWheelRight() {
+   r.UIState.Controls.WheelAngularVelocity--
+}
+
+func (r *Receiver) TurnWheelLeft() {
+   r.UIState.Controls.WheelAngularVelocity--
+}
+
+func (r *Receiver) StopTurnWheelLeft() {
+   r.UIState.Controls.WheelAngularVelocity++
 }
 
 func (r *Receiver) PushFuelPedal() {
