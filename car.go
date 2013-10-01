@@ -116,8 +116,8 @@ func (car *Car) Simulate(controls Controls, timestep float64) {
    staticWeight := g * m
    axelDisplacement := fl + rl
    
-   // maxFrontTyreTraction := rl / axelDisplacement * weight - h/axelLength * m * at.Dot(u)
-   dynamicWeight := h / axelDisplacement * m * at.Dot(u)
+   // maxFrontTyreTraction := rl / axelDisplacement * weight - (h-wr)/axelLength * m * at.Dot(u)
+   dynamicWeight := (h-wr) / axelDisplacement * m * at.Dot(u)
    weight := fl / axelDisplacement * staticWeight + dynamicWeight
    maxRearTyreTraction := mu * weight
    

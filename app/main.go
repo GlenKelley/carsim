@@ -65,7 +65,7 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Cameraview = glm.Ident4d()
    
    r.Data.Scene = gtk.EmptyModel()
-   model, err := gtk.LoadSceneAsModel("car.dae")
+   model, err := gtk.LoadSceneAsModel("drivetrain.dae")
    if err != nil { panic(err) }
    r.Data.Scene.AddChild(model)
    r.Data.Car = model.Children[0]
