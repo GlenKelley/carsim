@@ -90,7 +90,7 @@ func (r *Receiver) Init(window *glfw.Window) {
    r.Data.Scene.AddChild(model)
    r.Data.Car, _ = model.FindModelWithName("Car")
    grid := gtk.EmptyModel("Grid")
-   grid.AddGeometry(gtk.Grid(10))
+   grid.AddGeometry(gtk.Grid(100))
    r.Data.Scene.AddChild(grid)
    
    r.Car = sim.NewCar()
