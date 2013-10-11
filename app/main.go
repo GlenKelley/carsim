@@ -7,6 +7,7 @@ import (
    "encoding/json"
    glfw "github.com/go-gl/glfw3"
    gtk "github.com/GlenKelley/go-glutil"
+   loop "github.com/GlenKelley/go-glutil/gameloop"
    gl "github.com/GlenKelley/go-gl/gl32"
    glm "github.com/Jragonmiris/mathgl"
    sim "github.com/GlenKelley/carsim"
@@ -15,7 +16,7 @@ import (
 func main() {
    fmt.Println("Start")
    receiver := &Receiver{}
-   gtk.CreateWindow(640, 480, "carsim", false, receiver)
+   loop.CreateWindow(640, 480, "carsim", false, receiver, false)
 }
 
 func panicOnErr(err error) {
@@ -161,7 +162,7 @@ func (r *Receiver) Draw(window *glfw.Window) {
 }
 
 func (r *Receiver) Reshape(window *glfw.Window, width, height int) {
-   aspectRatio := gtk.WindowAspectRatio(window)
+   aspectRatio := loop.WindowAspectRatio(window)
    r.Data.Projection = glm.Perspectived(r.Constants.Fov, aspectRatio, r.Constants.Near, r.Constants.Far)
 }
 
@@ -181,7 +182,7 @@ func (r *Receiver) Scroll(window *glfw.Window, xoff float64, yoff float64) {
    r.Controls.DoScrollAction(xoff, yoff)
 }
 
-func (r *Receiver) Simulate(time gtk.GameTime) {
+func (r *Receiver) Simulate(time loop.GameTime) {
    dt := time.Delta.Seconds()
    r.Car.Simulate(r.UIState.Controls, dt)
    r.SetCarTransform(dt)
